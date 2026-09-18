@@ -1,0 +1,6 @@
+{
+  "name": "Attendance Management System",
+  "description": "Enterprise-grade role-based attendance management system with live camera verification, geolocation, overtime workflows, and administrative dashboards.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
