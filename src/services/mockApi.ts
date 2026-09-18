@@ -135,6 +135,8 @@ export const mockApi = {
     employeeId: string;
     selfie: string;
     location: Attendance["punchInLocation"];
+    faceDetected?: boolean;
+    faceConfidence?: number;
   }): Promise<Attendance> {
     await delay(400);
     return dbPunchIn(payload);

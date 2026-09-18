@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { useAppSelector } from "../../store/hooks";
+import { useAppSelector, useAppDispatch } from "../../store/hooks";
 import { useGetAttendanceQuery, useGetSettingsQuery } from "../../store/api/baseApi";
 import { AttendanceWizard } from "../../components/attendance/AttendanceWizard";
 import { AttendanceDetailsModal } from "../../components/attendance/AttendanceDetailsModal";
 import { Badge } from "../../components/common/Badge";
 import { Attendance } from "../../types/attendance";
+import { addToast } from "../../store/slices/uiSlice";
 import {
   formatDate,
   formatTime,
@@ -12,6 +13,7 @@ import {
   calculateWorkingMinutes,
   formatDurationPretty,
   formatDurationHoursMinutes,
+  getAttendanceDateString,
 } from "../../utils/date";
 import {
   Clock,
@@ -19,6 +21,8 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
+  Lock,
   ArrowRight,
   TrendingUp,
   LogIn,
@@ -37,6 +41,7 @@ import {
 } from "recharts";
 
 export const EmployeeDashboard: React.FC = () => {
+  const dispatch = useAppDispatch();
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const { data: settings } = useGetSettingsQuery();
   const { data: attendanceList = [], isLoading } = useGetAttendanceQuery(
@@ -54,14 +59,22 @@ export const EmployeeDashboard: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const todayStr = currentTime.toISOString().split("T")[0];
+  // Use normalized attendance date (Asia/Kolkata business day)
+  const todayStr = getAttendanceDateString(currentTime);
 
   // Find today's attendance record for current user
   const todayAttendance = attendanceList.find(
     (a) => a.date === todayStr && a.employeeId === currentUser?.id
   );
 
-  const isCurrentlyPunchedIn = !!todayAttendance && !todayAttendance.punchOut;
+  // ATTENDANCE STATES:
+  // STATE 1: No record exists for today -> Allow Punch In
+  // STATE 2: Punched In, not Punched Out -> Punch In disabled, Punch Out enabled
+  // STATE 3: Punched In AND Punched Out -> Attendance completed, Punch In strictly disabled
+  const hasPunchedInToday = !!todayAttendance?.punchIn;
+  const hasPunchedOutToday = !!todayAttendance?.punchOut;
+  const isAttendanceCompletedToday = hasPunchedInToday && hasPunchedOutToday;
+  const isCurrentlyPunchedIn = hasPunchedInToday && !hasPunchedOutToday;
 
   // Live working minutes calculation
   const currentWorkingMinutes = todayAttendance
@@ -73,6 +86,17 @@ export const EmployeeDashboard: React.FC = () => {
   const progressPercent = Math.min(100, Math.round((currentWorkingMinutes / standardMinutes) * 100));
 
   const handlePunchAction = () => {
+    // ENFORCE RULE 7: DO NOT OPEN CAMERA IF ATTENDANCE IS ALREADY CLOSED
+    if (isAttendanceCompletedToday) {
+      dispatch(
+        addToast({
+          type: "error",
+          message: "You already punched out for today. Please contact admin/manager.",
+        })
+      );
+      return;
+    }
+
     if (isCurrentlyPunchedIn) {
       setWizardMode("PUNCH_OUT");
     } else {
@@ -138,7 +162,9 @@ export const EmployeeDashboard: React.FC = () => {
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 Today's Shift: Standard 8-Hour Shift
               </span>
-              {todayAttendance ? (
+              {isAttendanceCompletedToday ? (
+                <Badge type="attendance" status="CLOSED" />
+              ) : todayAttendance ? (
                 <Badge type="attendance" status={todayAttendance.status} />
               ) : (
                 <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">
@@ -175,7 +201,9 @@ export const EmployeeDashboard: React.FC = () => {
               </div>
 
               <p className="text-[11px] text-slate-500 mt-2">
-                {progressPercent >= 100
+                {isAttendanceCompletedToday
+                  ? "✓ Today's shift is complete. Attendance closed for today."
+                  : progressPercent >= 100
                   ? "✓ Shift target achieved (Completed ≥8h). Punch out when you conclude for the day."
                   : isCurrentlyPunchedIn
                   ? `Shift in progress. ${formatDurationPretty(Math.max(0, standardMinutes - currentWorkingMinutes))} remaining to meet standard 8-hour requirement.`
@@ -184,13 +212,14 @@ export const EmployeeDashboard: React.FC = () => {
             </div>
 
             {/* Today's In / Out Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
               <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">
                   Punch In
                 </span>
-                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
-                  {todayAttendance ? formatTime(todayAttendance.punchIn) : "--:--"}
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 flex items-center gap-1.5">
+                  {hasPunchedInToday && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                  {todayAttendance?.punchIn ? formatTime(todayAttendance.punchIn) : "--:--"}
                 </span>
               </div>
 
@@ -198,18 +227,30 @@ export const EmployeeDashboard: React.FC = () => {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">
                   Punch Out
                 </span>
-                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 flex items-center gap-1.5">
+                  {hasPunchedOutToday && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
                   {todayAttendance?.punchOut ? formatTime(todayAttendance.punchOut) : "--:--"}
                 </span>
               </div>
 
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                  Validation
+                  Working Hours
+                </span>
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                  {todayAttendance ? formatDurationPretty(todayAttendance.totalWorkingMinutes || currentWorkingMinutes) : "--"}
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                  Status
                 </span>
                 <div className="mt-0.5">
-                  {todayAttendance ? (
-                    <Badge type="validation" status={todayAttendance.validationStatus} size="sm" />
+                  {isAttendanceCompletedToday ? (
+                    <Badge type="attendance" status="CLOSED" size="sm" />
+                  ) : todayAttendance ? (
+                    <Badge type="attendance" status={todayAttendance.status} size="sm" />
                   ) : (
                     <span className="text-xs text-slate-400">N/A</span>
                   )}
@@ -219,29 +260,70 @@ export const EmployeeDashboard: React.FC = () => {
           </div>
 
           {/* Primary Punch Action Button */}
-          <div className="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700/80 min-w-[240px]">
-            {isCurrentlyPunchedIn ? (
-              <button
-                id="btn-punch-out"
-                onClick={handlePunchAction}
-                className="w-full py-3 px-6 bg-rose-600 hover:bg-rose-700 text-white font-black text-sm rounded-xl shadow-lg shadow-rose-600/20 transition-all active:scale-95 flex items-center justify-center gap-2.5"
-              >
-                <LogOut className="w-5 h-5" />
-                PUNCH OUT
-              </button>
+          <div className="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700/80 min-w-[260px]">
+            {isAttendanceCompletedToday ? (
+              <div className="w-full flex flex-col items-center text-center">
+                <button
+                  id="btn-punch-in-disabled"
+                  type="button"
+                  disabled
+                  className="w-full py-3 px-6 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-black text-sm rounded-xl cursor-not-allowed border border-slate-300 dark:border-slate-700 flex items-center justify-center gap-2 select-none"
+                  title="You already punched out for today. Please contact admin/manager."
+                >
+                  <Lock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                  PUNCH IN (DISABLED)
+                </button>
+                <div
+                  id="attendance-closed-banner"
+                  className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 w-full text-left"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-900 dark:text-amber-200 leading-snug">
+                        You already punched out for today.
+                      </p>
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-snug">
+                        Please contact admin/manager.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 text-center">
+                  Shift finalized for today
+                </span>
+              </div>
+            ) : isCurrentlyPunchedIn ? (
+              <>
+                <button
+                  id="btn-punch-out"
+                  type="button"
+                  onClick={handlePunchAction}
+                  className="w-full py-3 px-6 bg-rose-600 hover:bg-rose-700 text-white font-black text-sm rounded-xl shadow-lg shadow-rose-600/20 transition-all active:scale-95 flex items-center justify-center gap-2.5"
+                >
+                  <LogOut className="w-5 h-5" />
+                  PUNCH OUT
+                </button>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 text-center">
+                  Requires live camera selfie & GPS
+                </span>
+              </>
             ) : (
-              <button
-                id="btn-punch-in"
-                onClick={handlePunchAction}
-                className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2.5"
-              >
-                <LogIn className="w-5 h-5" />
-                PUNCH IN
-              </button>
+              <>
+                <button
+                  id="btn-punch-in"
+                  type="button"
+                  onClick={handlePunchAction}
+                  className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2.5"
+                >
+                  <LogIn className="w-5 h-5" />
+                  PUNCH IN
+                </button>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 text-center">
+                  Requires live camera selfie & GPS
+                </span>
+              </>
             )}
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 text-center">
-              Requires live camera selfie & GPS
-            </span>
           </div>
         </div>
       </div>

@@ -1,5 +1,31 @@
 // Date and Attendance Duration calculation utilities
 
+/**
+ * Normalized business timezone for attendance recording
+ */
+export const BUSINESS_TIMEZONE = "Asia/Kolkata";
+
+/**
+ * Returns normalized attendance date string (YYYY-MM-DD) in the application's business timezone (Asia/Kolkata).
+ * Ensures consistency across shifts and prevents midnight UTC skew.
+ */
+export function getAttendanceDateString(
+  date: Date = new Date(),
+  timeZone: string = BUSINESS_TIMEZONE
+): string {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return formatter.format(date);
+  } catch {
+    return date.toISOString().split("T")[0];
+  }
+}
+
 export function formatTime(isoOrDate: string | Date | null | undefined): string {
   if (!isoOrDate) return "--:--";
   const date = new Date(isoOrDate);

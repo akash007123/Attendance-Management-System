@@ -5,10 +5,12 @@ import {
   useGetAttendanceQuery,
   useGetOvertimeRequestsQuery,
   useGetUsersQuery,
+  useGetSettingsQuery,
 } from "../../store/api/baseApi";
 import { AttendanceDetailsModal } from "../../components/attendance/AttendanceDetailsModal";
 import { AttendanceValidationModal } from "../../components/validation/AttendanceValidationModal";
 import { OvertimeReviewModal } from "../../components/overtime/OvertimeReviewModal";
+import { MonthlyHoursLineChart } from "../../components/dashboard/MonthlyHoursLineChart";
 import { Badge } from "../../components/common/Badge";
 import { Attendance } from "../../types/attendance";
 import { OvertimeRequest } from "../../types/overtime";
@@ -25,15 +27,6 @@ import {
   Eye,
   Check,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
 
 export const ManagerDashboard: React.FC = () => {
   const currentUser = useAppSelector((state) => state.auth.currentUser);
@@ -45,6 +38,7 @@ export const ManagerDashboard: React.FC = () => {
     : allUsers;
   const { data: attendanceList = [] } = useGetAttendanceQuery();
   const { data: overtimeRequests = [] } = useGetOvertimeRequestsQuery();
+  const { data: settings } = useGetSettingsQuery();
 
   const [selectedRecord, setSelectedRecord] = useState<Attendance | null>(null);
   const [validatingRecord, setValidatingRecord] = useState<Attendance | null>(null);
@@ -68,18 +62,10 @@ export const ManagerDashboard: React.FC = () => {
   const pendingValidations = attendanceList.filter((a) => a.validationStatus === "PENDING");
   const pendingOvertime = overtimeRequests.filter((o) => o.status === "PENDING");
 
-  // Chart data: attendance over last 5 days
+  // Filter attendance for manager's department
   const departmentAttendance = attendanceList.filter((a) =>
     currentUser?.role === "MANAGER" ? a.employeeDepartment === currentUser.department : true
   );
-
-  const chartData = [
-    { day: "Mon", present: 8, completed: 7 },
-    { day: "Tue", present: 10, completed: 9 },
-    { day: "Wed", present: 9, completed: 8 },
-    { day: "Thu", present: 11, completed: 10 },
-    { day: "Today", present: presentCount, completed: completedCount },
-  ];
 
   return (
     <div className="space-y-6">
@@ -161,6 +147,14 @@ export const ManagerDashboard: React.FC = () => {
           <span className="text-[11px] text-slate-500 mt-0.5 block">Awaiting manager decision</span>
         </div>
       </div>
+
+      {/* Monthly Performance Analytics: Daily Total Hours Worked vs. Average Expected Hours */}
+      <MonthlyHoursLineChart
+        attendanceList={attendanceList}
+        department={currentUser?.department || "Engineering"}
+        users={allUsers}
+        standardShiftHours={settings?.standardShiftHours || 8}
+      />
 
       {/* Main Grid: Live Team Attendance & Pending Action Center */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

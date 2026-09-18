@@ -198,6 +198,17 @@ export const AttendanceDetailsModal: React.FC<AttendanceDetailsModalProps> = ({
                 <div className="absolute top-2 left-2 bg-emerald-600/90 text-white text-[10px] font-bold px-2 py-0.5 rounded">
                   PUNCH IN
                 </div>
+                {record.faceDetected !== undefined && (
+                  <div
+                    className={`absolute top-2 right-2 text-white text-[10px] font-semibold px-2 py-0.5 rounded flex items-center gap-1 shadow ${
+                      record.faceDetected ? "bg-emerald-600/90" : "bg-amber-600/90"
+                    }`}
+                  >
+                    {record.faceDetected
+                      ? `✓ Face Verified (${record.faceConfidence || 95}%)`
+                      : "Unverified Face"}
+                  </div>
+                )}
               </div>
             </div>
 

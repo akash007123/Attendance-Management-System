@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { FileQuestion, Home } from "lucide-react";
 
-export const NotFoundPage: React.FC = () => {
+export const PageNotFound: React.FC = () => {
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center">
       <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center mb-4">

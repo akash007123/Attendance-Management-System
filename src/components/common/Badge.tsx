@@ -20,6 +20,15 @@ export const Badge: React.FC<BadgeProps> = ({
 
   if (type === "attendance") {
     switch (status) {
+      case "CLOSED":
+        return (
+          <span
+            className={`inline-flex items-center gap-1.5 font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 ${sizeClasses} ${className}`}
+          >
+            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            Closed
+          </span>
+        );
       case "COMPLETED":
         return (
           <span

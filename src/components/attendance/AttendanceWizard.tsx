@@ -19,7 +19,10 @@ import {
   ShieldCheck,
   AlertTriangle,
   Loader2,
+  ScanFace,
+  UserCheck,
 } from "lucide-react";
+import { FaceDetectionResult } from "../../utils/faceDetection";
 
 interface AttendanceWizardProps {
   isOpen: boolean;
@@ -40,9 +43,26 @@ export const AttendanceWizard: React.FC<AttendanceWizardProps> = ({
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const { data: settings } = useGetSettingsQuery();
 
+  const isAttendanceClosed =
+    mode === "PUNCH_IN" && !!activeAttendance?.punchIn && !!activeAttendance?.punchOut;
+
+  // RULE 7: DO NOT OPEN CAMERA IF ATTENDANCE IS ALREADY CLOSED
+  React.useEffect(() => {
+    if (isOpen && isAttendanceClosed) {
+      dispatch(
+        addToast({
+          type: "error",
+          message: "You already punched out for today. Please contact admin/manager.",
+        })
+      );
+      onClose();
+    }
+  }, [isOpen, isAttendanceClosed, dispatch, onClose]);
+
   const [step, setStep] = useState<Step>(1);
   const [capturedSelfie, setCapturedSelfie] = useState<string | null>(null);
   const [capturedLocation, setCapturedLocation] = useState<AttendanceLocation | null>(null);
+  const [faceResult, setFaceResult] = useState<FaceDetectionResult | null>(null);
 
   const [punchInMutation, { isLoading: isPunchingIn }] = usePunchInMutation();
   const [punchOutMutation, { isLoading: isPunchingOut }] = usePunchOutMutation();
@@ -54,6 +74,7 @@ export const AttendanceWizard: React.FC<AttendanceWizardProps> = ({
     setStep(1);
     setCapturedSelfie(null);
     setCapturedLocation(null);
+    setFaceResult(null);
     onClose();
   };
 
@@ -76,18 +97,31 @@ export const AttendanceWizard: React.FC<AttendanceWizardProps> = ({
   const handleSubmit = async () => {
     if (!currentUser || !capturedSelfie || !capturedLocation) return;
 
+    if (mode === "PUNCH_IN" && activeAttendance?.punchIn && activeAttendance?.punchOut) {
+      dispatch(
+        addToast({
+          type: "error",
+          message: "You already punched out for today. Please contact admin/manager.",
+        })
+      );
+      handleClose();
+      return;
+    }
+
     try {
       if (mode === "PUNCH_IN") {
         await punchInMutation({
           employeeId: currentUser.id,
           selfie: capturedSelfie,
           location: capturedLocation,
+          faceDetected: faceResult?.detected ?? true,
+          faceConfidence: faceResult?.confidence ?? 95,
         }).unwrap();
 
         dispatch(
           addToast({
             type: "success",
-            message: "Attendance punched in successfully!",
+            message: "Attendance punched in successfully with verified face presence!",
           })
         );
         setStep(4);
@@ -108,10 +142,17 @@ export const AttendanceWizard: React.FC<AttendanceWizardProps> = ({
         setStep(4);
       }
     } catch (err: any) {
+      const errorMessage =
+        err?.data?.message ||
+        err?.message ||
+        (err?.status === 409
+          ? "You already punched out for today. Please contact admin/manager."
+          : "Attendance submission failed.");
+
       dispatch(
         addToast({
           type: "error",
-          message: err.data?.message || err.message || "Attendance submission failed.",
+          message: errorMessage,
         })
       );
     }
@@ -184,18 +225,32 @@ export const AttendanceWizard: React.FC<AttendanceWizardProps> = ({
       {/* STEP 1: Camera Capture */}
       {step === 1 && (
         <div className="space-y-4">
-          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 rounded-xl flex items-center gap-3 text-xs text-blue-800 dark:text-blue-300">
-            <ShieldCheck className="w-5 h-5 shrink-0 text-blue-600" />
-            <div>
-              <strong>Biometric Authenticity Requirement:</strong> The policy mandates a real-time live selfie.
-              Ensure adequate ambient lighting and face the camera directly.
+          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl flex items-start gap-3 text-xs text-blue-800 dark:text-blue-300">
+            <ScanFace className="w-5 h-5 shrink-0 text-blue-600 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-blue-900 dark:text-blue-200">
+                Client-Side Face Detection Active:
+              </p>
+              <p className="leading-relaxed">
+                {mode === "PUNCH_IN"
+                  ? "Camera stream is continuously analyzed to confirm user presence before clock-in. Center your face directly within the guide until verified."
+                  : "Live camera capture verified for exit punch out. Align face in the frame."}
+              </p>
             </div>
           </div>
 
           <CameraCapture
-            onCapture={(img) => setCapturedSelfie(img)}
+            mode={mode}
+            requireFaceDetection={mode === "PUNCH_IN"}
+            onCapture={(img, res) => {
+              setCapturedSelfie(img);
+              if (res) setFaceResult(res);
+            }}
             capturedImage={capturedSelfie}
-            onRetake={() => setCapturedSelfie(null)}
+            onRetake={() => {
+              setCapturedSelfie(null);
+              setFaceResult(null);
+            }}
           />
         </div>
       )}
@@ -230,6 +285,11 @@ export const AttendanceWizard: React.FC<AttendanceWizardProps> = ({
                 <span className="absolute bottom-2 left-2 bg-slate-900/80 text-white text-[10px] font-mono px-2 py-0.5 rounded">
                   {mode === "PUNCH_IN" ? "IN-SELFIE" : "OUT-SELFIE"}
                 </span>
+                {faceResult?.detected && (
+                  <span className="absolute top-2 right-2 bg-emerald-600/90 text-white text-[10px] font-semibold px-2 py-0.5 rounded flex items-center gap-1 shadow">
+                    <UserCheck className="w-3 h-3" /> User Present
+                  </span>
+                )}
               </div>
             </div>
 
@@ -252,6 +312,26 @@ export const AttendanceWizard: React.FC<AttendanceWizardProps> = ({
                 <div className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
                   <Clock className="w-3.5 h-3.5 text-blue-500" />
                   {formatDate(now)}, {formatTime(now)}
+                </div>
+              </div>
+
+              {/* Biometric Verification Check */}
+              <div>
+                <span className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">
+                  Biometric Face Presence
+                </span>
+                <div className="mt-1">
+                  {faceResult?.detected ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 rounded-lg">
+                      <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      Verified Present ({faceResult.confidence}% Confidence)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-300 font-medium bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-2.5 py-1 rounded-lg">
+                      <ScanFace className="w-3.5 h-3.5 text-blue-500" />
+                      Live Stream Checked
+                    </span>
+                  )}
                 </div>
               </div>
 

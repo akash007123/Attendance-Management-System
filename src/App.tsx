@@ -35,9 +35,9 @@ import { DailyReportPage } from "./pages/reports/DailyReportPage";
 import { NotificationsPage } from "./pages/notifications/NotificationsPage";
 import { ProfilePage } from "./pages/profile/ProfilePage";
 
-// Error Pages
-import { UnauthorizedPage } from "./pages/error/UnauthorizedPage";
-import { NotFoundPage } from "./pages/error/NotFoundPage";
+// Status & Fallback Pages
+import { AccessDeniedPage } from "./pages/status/AccessDeniedPage";
+import { PageNotFound } from "./pages/status/PageNotFound";
 
 // Root Redirect Component
 const RootRedirect: React.FC = () => {
@@ -54,6 +54,55 @@ const RootRedirect: React.FC = () => {
       return <Navigate to="/manager/dashboard" replace />;
     default:
       return <Navigate to="/employee/dashboard" replace />;
+  }
+};
+
+// Generic Role-Aware Module Router
+const RoleAwareModuleRedirect: React.FC<{
+  module: "dashboard" | "attendance" | "overtime" | "validation" | "settings" | "users" | "reports";
+}> = ({ module }) => {
+  const { isAuthenticated, currentUser } = useAppSelector((state) => state.auth);
+
+  if (!isAuthenticated || !currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const role = currentUser.role;
+
+  switch (module) {
+    case "dashboard":
+      if (role === "ADMIN") return <Navigate to="/admin/dashboard" replace />;
+      if (role === "MANAGER") return <Navigate to="/manager/dashboard" replace />;
+      return <Navigate to="/employee/dashboard" replace />;
+
+    case "attendance":
+      if (role === "ADMIN") return <Navigate to="/admin/attendance" replace />;
+      if (role === "MANAGER") return <Navigate to="/manager/attendance" replace />;
+      return <Navigate to="/employee/attendance" replace />;
+
+    case "overtime":
+      if (role === "ADMIN") return <Navigate to="/admin/overtime" replace />;
+      if (role === "MANAGER") return <Navigate to="/manager/overtime" replace />;
+      return <Navigate to="/employee/overtime" replace />;
+
+    case "validation":
+      if (role === "ADMIN") return <Navigate to="/admin/validation" replace />;
+      if (role === "MANAGER") return <Navigate to="/manager/validation" replace />;
+      return <Navigate to="/employee/dashboard" replace />;
+
+    case "settings":
+      if (role === "ADMIN") return <Navigate to="/admin/settings" replace />;
+      return <Navigate to="/profile" replace />;
+
+    case "users":
+      if (role === "ADMIN") return <Navigate to="/admin/users" replace />;
+      return <Navigate to="/employee/dashboard" replace />;
+
+    case "reports":
+      return <Navigate to="/reports/daily" replace />;
+
+    default:
+      return <Navigate to="/" replace />;
   }
 };
 
@@ -82,7 +131,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/403" element={<UnauthorizedPage />} />
+          <Route path="/403" element={<AccessDeniedPage />} />
 
           {/* Root Index Redirect */}
           <Route path="/" element={<RootRedirect />} />
@@ -207,12 +256,21 @@ export default function App() {
 
             {/* Common Shared Routes */}
             <Route path="/reports/daily" element={<DailyReportPage />} />
+            <Route path="/reports" element={<RoleAwareModuleRedirect module="reports" />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+
+            {/* Role-Aware Module Route Aliases */}
+            <Route path="/dashboard" element={<RoleAwareModuleRedirect module="dashboard" />} />
+            <Route path="/attendance" element={<RoleAwareModuleRedirect module="attendance" />} />
+            <Route path="/overtime" element={<RoleAwareModuleRedirect module="overtime" />} />
+            <Route path="/validation" element={<RoleAwareModuleRedirect module="validation" />} />
+            <Route path="/settings" element={<RoleAwareModuleRedirect module="settings" />} />
+            <Route path="/users" element={<RoleAwareModuleRedirect module="users" />} />
           </Route>
 
           {/* 404 Catch-All */}
-          <Route path="*" element={<NotFoundPage />} />
+          <Route path="*" element={<PageNotFound />} />
         </Routes>
       </BrowserRouter>
     </Provider>

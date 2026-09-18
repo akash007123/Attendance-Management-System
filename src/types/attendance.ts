@@ -1,4 +1,4 @@
-export type AttendanceStatus = "PRESENT" | "INCOMPLETE" | "COMPLETED" | "ABSENT" | "LATE" | "HALF_DAY";
+export type AttendanceStatus = "PRESENT" | "INCOMPLETE" | "COMPLETED" | "ABSENT" | "LATE" | "HALF_DAY" | "CLOSED";
 
 export type ValidationStatus = "PENDING" | "VALID" | "INVALID" | "SUSPICIOUS";
 
@@ -37,6 +37,8 @@ export interface Attendance {
   overtimeStatus: OvertimeStatus;
   overtimeHours?: number;
   overtimeReason?: string;
+  faceDetected?: boolean;
+  faceConfidence?: number;
   createdAt: string;
   updatedAt: string;
 }

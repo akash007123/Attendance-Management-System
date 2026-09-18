@@ -9,7 +9,7 @@ export const DEFAULT_OFFICE_COORDINATES = {
   address: "Tech Hub Tower, Vijay Nagar, Indore, MP 452010",
 };
 
-export const MOCK_ATTENDANCE: Attendance[] = [
+const STATIC_ATTENDANCE: Attendance[] = [
   // Today's records (assume current date 2026-09-18)
   {
     id: "att_20260918_emp01",
@@ -354,5 +354,198 @@ export const MOCK_ATTENDANCE: Attendance[] = [
     overtimeStatus: "NONE",
     createdAt: "2026-09-12T09:15:00.000Z",
     updatedAt: "2026-09-12T09:15:00.000Z",
-  }
+  },
 ];
+
+// Additional September weekdays records for complete monthly team analytics
+const generatedSeptemberRecords: Attendance[] = [
+  { date: "2026-09-01", aarav: 510, neha: 495, rahul: 480, ananya: 505 },
+  { date: "2026-09-02", aarav: 490, neha: 510, rahul: 480, ananya: 495 },
+  { date: "2026-09-03", aarav: 510, neha: 480, rahul: 495, ananya: 490 },
+  { date: "2026-09-04", aarav: 525, neha: 510, rahul: 480, ananya: 520 },
+  { date: "2026-09-07", aarav: 480, neha: 480, rahul: 470, ananya: 495 },
+  { date: "2026-09-08", aarav: 510, neha: 495, rahul: 480, ananya: 480 },
+  { date: "2026-09-09", aarav: 540, neha: 510, rahul: 495, ananya: 510 },
+  { date: "2026-09-10", aarav: 480, neha: 480, rahul: 465, ananya: 480 },
+  { date: "2026-09-11", aarav: 510, neha: 495, rahul: 480, ananya: 510 },
+  { date: "2026-09-14", aarav: 480, neha: 510, rahul: 480, ananya: 510 },
+  { date: "2026-09-15", aarav: 360, neha: 480, rahul: 465, ananya: 495 },
+  { date: "2026-09-16", aarav: 610, neha: 540, rahul: 495, ananya: 520 },
+  { date: "2026-09-17", aarav: 520, neha: 495, rahul: 480, ananya: 480 },
+].flatMap(({ date, aarav, neha, rahul, ananya }) => {
+  const records: Attendance[] = [];
+
+  // Omit Aarav if already present in STATIC_ATTENDANCE for this date
+  if (date !== "2026-09-15" && date !== "2026-09-16" && date !== "2026-09-17") {
+    records.push({
+      id: `att_${date.replace(/-/g, "")}_emp01`,
+      employeeId: "usr_emp_01",
+      employeeName: "Aarav Sharma",
+      employeeDepartment: "Engineering",
+      employeeAvatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      date,
+      punchIn: `${date}T09:00:00.000Z`,
+      punchOut: `${date}T${Math.floor(9 + aarav / 60)}:${String(aarav % 60).padStart(2, "0")}:00.000Z`,
+      punchInSelfie: generateMockSelfie("Aarav Sharma", `${date} 09:00 AM`, "Vijay Nagar"),
+      punchOutSelfie: generateMockSelfie("Aarav Sharma", `${date} 05:30 PM`, "Vijay Nagar"),
+      punchInLocation: {
+        latitude: 22.7196,
+        longitude: 75.8577,
+        accuracy: 8,
+        isWithinGeofence: true,
+        distanceMeters: 12,
+        address: "Tech Hub Campus, Indore",
+      },
+      punchOutLocation: {
+        latitude: 22.7196,
+        longitude: 75.8577,
+        accuracy: 9,
+        isWithinGeofence: true,
+        distanceMeters: 15,
+        address: "Tech Hub Campus, Indore",
+      },
+      totalWorkingMinutes: aarav,
+      status: (aarav >= 480 ? "COMPLETED" : "INCOMPLETE") as Attendance["status"],
+      validationStatus: "VALID" as Attendance["validationStatus"],
+      validatedBy: "Priya Patel",
+      validatedAt: `${date}T18:00:00.000Z`,
+      validationRemarks: "Selfie and office location verified.",
+      overtimeStatus: (aarav > 480 ? "APPROVED" : "NONE") as Attendance["overtimeStatus"],
+      overtimeHours: aarav > 480 ? Math.round(((aarav - 480) / 60) * 10) / 10 : 0,
+      createdAt: `${date}T09:00:00.000Z`,
+      updatedAt: `${date}T18:00:00.000Z`,
+    });
+  }
+
+  records.push({
+    id: `att_${date.replace(/-/g, "")}_emp02`,
+    employeeId: "usr_emp_02",
+    employeeName: "Neha Singh",
+    employeeDepartment: "Engineering",
+    employeeAvatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80",
+    date,
+    punchIn: `${date}T08:55:00.000Z`,
+    punchOut: `${date}T${Math.floor(9 + neha / 60)}:${String(neha % 60).padStart(2, "0")}:00.000Z`,
+    punchInSelfie: generateMockSelfie("Neha Singh", `${date} 08:55 AM`, "Vijay Nagar"),
+    punchOutSelfie: generateMockSelfie("Neha Singh", `${date} 05:25 PM`, "Vijay Nagar"),
+    punchInLocation: {
+      latitude: 22.7196,
+      longitude: 75.8577,
+      accuracy: 7,
+      isWithinGeofence: true,
+      distanceMeters: 10,
+      address: "Tech Hub Campus, Indore",
+    },
+    punchOutLocation: {
+      latitude: 22.7196,
+      longitude: 75.8577,
+      accuracy: 8,
+      isWithinGeofence: true,
+      distanceMeters: 14,
+      address: "Tech Hub Campus, Indore",
+    },
+    totalWorkingMinutes: neha,
+    status: (neha >= 480 ? "COMPLETED" : "INCOMPLETE") as Attendance["status"],
+    validationStatus: "VALID" as Attendance["validationStatus"],
+    validatedBy: "Priya Patel",
+    validatedAt: `${date}T18:00:00.000Z`,
+    validationRemarks: "Selfie and office location verified.",
+    overtimeStatus: (neha > 480 ? "APPROVED" : "NONE") as Attendance["overtimeStatus"],
+    overtimeHours: neha > 480 ? Math.round(((neha - 480) / 60) * 10) / 10 : 0,
+    createdAt: `${date}T08:55:00.000Z`,
+    updatedAt: `${date}T18:00:00.000Z`,
+  });
+
+  records.push({
+    id: `att_${date.replace(/-/g, "")}_emp03`,
+    employeeId: "usr_emp_03",
+    employeeName: "Rahul Verma",
+    employeeDepartment: "Engineering",
+    employeeAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    date,
+    punchIn: `${date}T09:10:00.000Z`,
+    punchOut: `${date}T${Math.floor(9 + rahul / 60)}:${String(rahul % 60).padStart(2, "0")}:00.000Z`,
+    punchInSelfie: generateMockSelfie("Rahul Verma", `${date} 09:10 AM`, "Vijay Nagar"),
+    punchOutSelfie: generateMockSelfie("Rahul Verma", `${date} 05:15 PM`, "Vijay Nagar"),
+    punchInLocation: {
+      latitude: 22.7196,
+      longitude: 75.8577,
+      accuracy: 10,
+      isWithinGeofence: true,
+      distanceMeters: 18,
+      address: "Tech Hub Campus, Indore",
+    },
+    punchOutLocation: {
+      latitude: 22.7196,
+      longitude: 75.8577,
+      accuracy: 11,
+      isWithinGeofence: true,
+      distanceMeters: 20,
+      address: "Tech Hub Campus, Indore",
+    },
+    totalWorkingMinutes: rahul,
+    status: (rahul >= 480 ? "COMPLETED" : "INCOMPLETE") as Attendance["status"],
+    validationStatus: "VALID" as Attendance["validationStatus"],
+    validatedBy: "Priya Patel",
+    validatedAt: `${date}T18:00:00.000Z`,
+    validationRemarks: "Selfie and office location verified.",
+    overtimeStatus: (rahul > 480 ? "APPROVED" : "NONE") as Attendance["overtimeStatus"],
+    overtimeHours: rahul > 480 ? Math.round(((rahul - 480) / 60) * 10) / 10 : 0,
+    createdAt: `${date}T09:10:00.000Z`,
+    updatedAt: `${date}T18:00:00.000Z`,
+  });
+
+  // Omit Ananya if already present in STATIC_ATTENDANCE for this date
+  if (date !== "2026-09-14") {
+    records.push({
+      id: `att_${date.replace(/-/g, "")}_emp04`,
+      employeeId: "usr_emp_04",
+      employeeName: "Ananya Deshmukh",
+      employeeDepartment: "Engineering",
+      employeeAvatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
+      date,
+      punchIn: `${date}T09:05:00.000Z`,
+      punchOut: `${date}T${Math.floor(9 + ananya / 60)}:${String(ananya % 60).padStart(2, "0")}:00.000Z`,
+      punchInSelfie: generateMockSelfie("Ananya Deshmukh", `${date} 09:05 AM`, "Vijay Nagar"),
+      punchOutSelfie: generateMockSelfie("Ananya Deshmukh", `${date} 05:40 PM`, "Vijay Nagar"),
+      punchInLocation: {
+        latitude: 22.7196,
+        longitude: 75.8577,
+        accuracy: 6,
+        isWithinGeofence: true,
+        distanceMeters: 8,
+        address: "Tech Hub Campus, Indore",
+      },
+      punchOutLocation: {
+        latitude: 22.7196,
+        longitude: 75.8577,
+        accuracy: 7,
+        isWithinGeofence: true,
+        distanceMeters: 10,
+        address: "Tech Hub Campus, Indore",
+      },
+      totalWorkingMinutes: ananya,
+      status: (ananya >= 480 ? "COMPLETED" : "INCOMPLETE") as Attendance["status"],
+      validationStatus: "VALID" as Attendance["validationStatus"],
+      validatedBy: "Priya Patel",
+      validatedAt: `${date}T18:00:00.000Z`,
+      validationRemarks: "Selfie and office location verified.",
+      overtimeStatus: (ananya > 480 ? "APPROVED" : "NONE") as Attendance["overtimeStatus"],
+      overtimeHours: ananya > 480 ? Math.round(((ananya - 480) / 60) * 10) / 10 : 0,
+      createdAt: `${date}T09:05:00.000Z`,
+      updatedAt: `${date}T18:00:00.000Z`,
+    });
+  }
+
+  return records;
+});
+
+// Strictly guarantee every single attendance record has a unique ID
+const attendanceMap = new Map<string, Attendance>();
+[...STATIC_ATTENDANCE, ...generatedSeptemberRecords].forEach((record) => {
+  if (!attendanceMap.has(record.id)) {
+    attendanceMap.set(record.id, record);
+  }
+});
+
+export const MOCK_ATTENDANCE: Attendance[] = Array.from(attendanceMap.values());

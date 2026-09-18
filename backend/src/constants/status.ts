@@ -1,0 +1,28 @@
+export const ATTENDANCE_STATUS = {
+  PRESENT: "PRESENT",
+  INCOMPLETE: "INCOMPLETE",
+  COMPLETED: "COMPLETED",
+  ABSENT: "ABSENT",
+  LATE: "LATE",
+  HALF_DAY: "HALF_DAY",
+  CLOSED: "CLOSED",
+} as const;
+
+export const VALIDATION_STATUS = {
+  PENDING: "PENDING",
+  VALID: "VALID",
+  INVALID: "INVALID",
+  SUSPICIOUS: "SUSPICIOUS",
+} as const;
+
+export const OVERTIME_STATUS = {
+  NONE: "NONE",
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+} as const;
+
+export const USER_STATUS = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+} as const;

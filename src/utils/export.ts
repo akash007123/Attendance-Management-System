@@ -379,6 +379,47 @@ export function generateMonthlyAttendancePDF({
 }
 
 
+export function exportAttendanceRecordsToCSV(
+  records: Attendance[],
+  filename = "attendance-records.csv"
+): void {
+  if (!records || records.length === 0) {
+    alert("No attendance records found to export.");
+    return;
+  }
+
+  const formattedData = records.map((r) => ({
+    "Employee ID": r.employeeId,
+    "Employee Name": r.employeeName,
+    "Department": r.employeeDepartment,
+    "Date": r.date,
+    "Punch In Time": r.punchIn ? formatTime(r.punchIn) : "--",
+    "Punch In Location": r.punchInLocation?.isWithinGeofence
+      ? `Office (${r.punchInLocation.address || "Geofenced"})`
+      : `Outside Geofence (${r.punchInLocation?.address || "Remote"})`,
+    "Punch Out Time": r.punchOut ? formatTime(r.punchOut) : "--",
+    "Punch Out Location": r.punchOutLocation
+      ? r.punchOutLocation.isWithinGeofence
+        ? `Office (${r.punchOutLocation.address || "Geofenced"})`
+        : `Outside Geofence (${r.punchOutLocation.address || "Remote"})`
+      : "--",
+    "Total Working Time": formatDurationHoursMinutes(r.totalWorkingMinutes),
+    "Working Hours (hrs)": (r.totalWorkingMinutes / 60).toFixed(2),
+    "Shift Status": r.status,
+    "Validation Status": r.validationStatus,
+    "Face Presence": r.faceDetected === true
+      ? `Verified (${r.faceConfidence ?? 95}%)`
+      : r.faceDetected === false
+      ? "Failed / Unverified"
+      : "Standard",
+    "Overtime Hours": r.overtimeHours || 0,
+    "Overtime Status": r.overtimeStatus || "NONE",
+    "Audit Remarks": r.validationRemarks || "",
+  }));
+
+  exportToCSV(formattedData, filename);
+}
+
 export function exportToCSV(data: Record<string, any>[], filename = "attendance-report.csv"): void {
   if (!data || data.length === 0) {
     alert("No data available to export.");

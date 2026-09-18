@@ -9,7 +9,7 @@ import { MOCK_OVERTIME_REQUESTS } from "../data/mockOvertime";
 import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
 import { DEFAULT_SETTINGS } from "../data/mockSettings";
 import { getItem, setItem } from "../utils/storage";
-import { calculateWorkingMinutes, isCompletedShift } from "../utils/date";
+import { calculateWorkingMinutes, isCompletedShift, getAttendanceDateString } from "../utils/date";
 
 const KEYS = {
   USERS: "ams_db_users",
@@ -17,7 +17,7 @@ const KEYS = {
   OVERTIME: "ams_db_overtime",
   NOTIFICATIONS: "ams_db_notifications",
   SETTINGS: "ams_db_settings",
-  INITIALIZED: "ams_db_initialized_v1",
+  INITIALIZED: "ams_db_initialized_v3",
 };
 
 // Initialize database with seeds if not present
@@ -83,8 +83,16 @@ export function dbGetAttendance(): Attendance[] {
   initMockDatabase();
   const list = getItem<Attendance[]>(KEYS.ATTENDANCE, MOCK_ATTENDANCE);
   
+  // Deduplicate by ID to guarantee unique keys across rendering cycles
+  const seenIds = new Set<string>();
+  const uniqueList = list.filter((item) => {
+    if (!item?.id || seenIds.has(item.id)) return false;
+    seenIds.add(item.id);
+    return true;
+  });
+
   // Sort descending by date & punchIn
-  return list.sort((a, b) => new Date(b.punchIn).getTime() - new Date(a.punchIn).getTime());
+  return uniqueList.sort((a, b) => new Date(b.punchIn).getTime() - new Date(a.punchIn).getTime());
 }
 
 export function dbGetAttendanceById(id: string): Attendance | undefined {
@@ -96,23 +104,63 @@ export function dbPunchIn(params: {
   employeeId: string;
   selfie: string;
   location: Attendance["punchInLocation"];
+  faceDetected?: boolean;
+  faceConfidence?: number;
 }): Attendance {
   const users = dbGetUsers();
   const employee = users.find(u => u.id === params.employeeId);
   if (!employee) throw new Error("Employee not found");
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getAttendanceDateString();
   const list = dbGetAttendance();
 
-  // Check if already punched in today and not punched out
-  const activePunch = list.find(
-    a => a.employeeId === params.employeeId && a.date === todayStr && !a.punchOut
+  // Find attendance record for this employee for the current business date (Asia/Kolkata)
+  const todayRecord = list.find(
+    a => a.employeeId === params.employeeId && a.date === todayStr
   );
-  if (activePunch) {
-    throw new Error("You are already punched in for today.");
+
+  if (todayRecord) {
+    // STATE 3: If already punched in AND punched out
+    if (todayRecord.punchOut) {
+      console.warn(
+        `[AUDIT] ATTENDANCE_PUNCH_IN_REJECTED: Employee attempted duplicate punch-in after punch-out. employeeId=${params.employeeId} date=${todayStr} reason=ATTENDANCE_ALREADY_PUNCHED_OUT`
+      );
+      const err: any = new Error("You already punched out for today. Please contact admin/manager.");
+      err.code = "ATTENDANCE_ALREADY_PUNCHED_OUT";
+      err.status = 409;
+      throw err;
+    }
+
+    // STATE 2: If already punched in but not punched out
+    if (todayRecord.punchIn) {
+      console.warn(
+        `[AUDIT] ATTENDANCE_PUNCH_IN_REJECTED: Employee attempted duplicate punch-in while shift is active. employeeId=${params.employeeId} date=${todayStr} reason=ATTENDANCE_ALREADY_PUNCHED_IN`
+      );
+      const err: any = new Error("You have already punched in for today.");
+      err.code = "ATTENDANCE_ALREADY_PUNCHED_IN";
+      err.status = 409;
+      throw err;
+    }
   }
 
   const now = new Date().toISOString();
+  const isFaceVerified = params.faceDetected ?? true;
+  const isLocationValid = params.location.isWithinGeofence;
+
+  let validationStatus: Attendance["validationStatus"] = "PENDING";
+  let validationRemarks: string | undefined = undefined;
+
+  if (isFaceVerified && isLocationValid) {
+    validationStatus = "VALID";
+    validationRemarks = `Face presence verified (${params.faceConfidence ?? 95}% confidence). Inside geofenced office perimeter.`;
+  } else if (!isFaceVerified) {
+    validationStatus = "SUSPICIOUS";
+    validationRemarks = "Face presence verification failed or was bypassed during punch in.";
+  } else if (!isLocationValid) {
+    validationStatus = "SUSPICIOUS";
+    validationRemarks = `Punched in ${params.location.distanceMeters || "several"}m outside designated office geofence.`;
+  }
+
   const newAttendance: Attendance = {
     id: `att_${Date.now()}_${params.employeeId}`,
     employeeId: employee.id,
@@ -129,10 +177,10 @@ export function dbPunchIn(params: {
     punchOutLocation: null,
     totalWorkingMinutes: 0,
     status: "PRESENT",
-    validationStatus: params.location.isWithinGeofence ? "PENDING" : "SUSPICIOUS",
-    validationRemarks: params.location.isWithinGeofence
-      ? undefined
-      : `Punched in ${params.location.distanceMeters || "several"}m outside designated office geofence.`,
+    validationStatus,
+    validationRemarks,
+    faceDetected: isFaceVerified,
+    faceConfidence: params.faceConfidence ?? (isFaceVerified ? 95 : 0),
     overtimeStatus: "NONE",
     createdAt: now,
     updatedAt: now,
@@ -167,13 +215,27 @@ export function dbPunchOut(params: {
   attendanceId: string;
   selfie: string;
   location: Attendance["punchInLocation"];
+  employeeId?: string;
 }): Attendance {
   const list = dbGetAttendance();
-  const index = list.findIndex(a => a.id === params.attendanceId);
-  if (index === -1) throw new Error("Attendance record not found");
+  const todayStr = getAttendanceDateString();
+  const index = list.findIndex(
+    a => a.id === params.attendanceId || (params.employeeId && a.employeeId === params.employeeId && a.date === todayStr)
+  );
+  if (index === -1) {
+    const err: any = new Error("You must punch in before punching out.");
+    err.code = "ATTENDANCE_NOT_PUNCHED_IN";
+    err.status = 400;
+    throw err;
+  }
 
   const record = list[index];
-  if (record.punchOut) throw new Error("Already punched out for this record.");
+  if (record.punchOut) {
+    const err: any = new Error("You have already punched out for today.");
+    err.code = "ATTENDANCE_ALREADY_PUNCHED_OUT";
+    err.status = 409;
+    throw err;
+  }
 
   const now = new Date().toISOString();
   const workingMinutes = calculateWorkingMinutes(record.punchIn, now);

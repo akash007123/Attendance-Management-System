@@ -44,9 +44,18 @@ export const LoginPage: React.FC = () => {
         })
       );
 
-      // Route according to role
+      // Route according to role safely
       const from = (location.state as any)?.from?.pathname;
-      if (from && !from.includes("/login") && !from.includes("/403")) {
+      const isRouteAllowed = (targetPath?: string, userRole?: string) => {
+        if (!targetPath || targetPath.includes("/login") || targetPath.includes("/403") || targetPath === "/") {
+          return false;
+        }
+        if (targetPath.startsWith("/admin") && userRole !== "ADMIN") return false;
+        if (targetPath.startsWith("/manager") && userRole !== "MANAGER" && userRole !== "ADMIN") return false;
+        return true;
+      };
+
+      if (from && isRouteAllowed(from, response.user.role)) {
         navigate(from, { replace: true });
       } else {
         switch (response.user.role) {

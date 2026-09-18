@@ -1,14 +1,16 @@
 import React, { useState, useMemo } from "react";
 import { useGetAttendanceQuery } from "../../store/api/baseApi";
-import { useAppSelector } from "../../store/hooks";
+import { useAppSelector, useAppDispatch } from "../../store/hooks";
 import { AttendanceDetailsModal } from "../../components/attendance/AttendanceDetailsModal";
 import { AttendanceValidationModal } from "../../components/validation/AttendanceValidationModal";
+import { DateRangeExportModal } from "../../components/attendance/DateRangeExportModal";
 import { Badge } from "../../components/common/Badge";
 import { Pagination } from "../../components/common/Pagination";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Attendance } from "../../types/attendance";
 import { formatDate, formatTime, formatDurationHoursMinutes } from "../../utils/date";
-import { exportToCSV, exportToPDF } from "../../utils/export";
+import { exportAttendanceRecordsToCSV, exportToPDF } from "../../utils/export";
+import { addToast } from "../../store/slices/uiSlice";
 import {
   Search,
   Filter,
@@ -18,9 +20,12 @@ import {
   ShieldCheck,
   Building,
   Calendar,
+  CalendarRange,
+  RotateCcw,
 } from "lucide-react";
 
 export const AllAttendancePage: React.FC = () => {
+  const dispatch = useAppDispatch();
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const { data: attendanceList = [], isLoading } = useGetAttendanceQuery();
 
@@ -28,10 +33,12 @@ export const AllAttendancePage: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [selectedValidation, setSelectedValidation] = useState<string>("ALL");
-  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<Attendance | null>(null);
   const [validatingRecord, setValidatingRecord] = useState<Attendance | null>(null);
 
@@ -50,7 +57,10 @@ export const AllAttendancePage: React.FC = () => {
       if (selectedValidation !== "ALL" && item.validationStatus !== selectedValidation) {
         return false;
       }
-      if (selectedDate && item.date !== selectedDate) {
+      if (startDate && item.date < startDate) {
+        return false;
+      }
+      if (endDate && item.date > endDate) {
         return false;
       }
       if (searchQuery.trim()) {
@@ -68,7 +78,8 @@ export const AllAttendancePage: React.FC = () => {
     selectedDepartment,
     selectedStatus,
     selectedValidation,
-    selectedDate,
+    startDate,
+    endDate,
     searchQuery,
   ]);
 
@@ -77,11 +88,44 @@ export const AllAttendancePage: React.FC = () => {
   const paginatedList = filteredList.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handleExportCSV = () => {
-    exportToCSV(filteredList, "workforce-attendance-report.csv");
+    const rangeSuffix =
+      startDate && endDate
+        ? `_${startDate}_to_${endDate}`
+        : startDate
+        ? `_from_${startDate}`
+        : endDate
+        ? `_until_${endDate}`
+        : "";
+    exportAttendanceRecordsToCSV(filteredList, `workforce-attendance${rangeSuffix}.csv`);
+    dispatch(
+      addToast({
+        type: "success",
+        message: `Exported ${filteredList.length} attendance records to CSV.`,
+      })
+    );
   };
 
   const handleExportPDF = () => {
     exportToPDF(filteredList, "Workforce Attendance Log", "workforce-attendance-report.pdf");
+  };
+
+  const hasActiveFilters = Boolean(
+    searchQuery ||
+      selectedDepartment !== "ALL" ||
+      selectedStatus !== "ALL" ||
+      selectedValidation !== "ALL" ||
+      startDate ||
+      endDate
+  );
+
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setSelectedDepartment("ALL");
+    setSelectedStatus("ALL");
+    setSelectedValidation("ALL");
+    setStartDate("");
+    setEndDate("");
+    setCurrentPage(1);
   };
 
   return (
@@ -97,15 +141,30 @@ export const AllAttendancePage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Primary Action: Export CSV by Date Range */}
           <button
+            id="export-date-range-csv-btn"
+            type="button"
+            onClick={() => setIsExportModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl shadow-xs transition-colors cursor-pointer"
+            title="Export CSV for custom date range with summary preview"
+          >
+            <CalendarRange className="w-4 h-4" />
+            Export CSV by Date Range
+          </button>
+
+          <button
+            id="export-table-csv-btn"
             type="button"
             onClick={handleExportCSV}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl shadow-xs transition-colors"
+            title="Download CSV for current table view"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            Export CSV
+            Export Current View
           </button>
+
           <button
             type="button"
             onClick={handleExportPDF}
@@ -119,7 +178,30 @@ export const AllAttendancePage: React.FC = () => {
 
       {/* Filters Bar */}
       <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
+            <Filter className="w-4 h-4 text-blue-500" />
+            <span>Search & Filter Directory</span>
+            {(startDate || endDate) && (
+              <span className="ml-2 text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-full">
+                Date Range Active
+              </span>
+            )}
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-rose-600 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset All Filters
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Search */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -156,13 +238,30 @@ export const AllAttendancePage: React.FC = () => {
             </div>
           )}
 
-          {/* Date Filter */}
+          {/* From Date Filter */}
           <div>
             <input
+              id="filter-start-date"
               type="date"
-              value={selectedDate}
+              title="From Date"
+              value={startDate}
               onChange={(e) => {
-                setSelectedDate(e.target.value);
+                setStartDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* To Date Filter */}
+          <div>
+            <input
+              id="filter-end-date"
+              type="date"
+              title="To Date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
                 setCurrentPage(1);
               }}
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -213,15 +312,9 @@ export const AllAttendancePage: React.FC = () => {
         {paginatedList.length === 0 ? (
           <EmptyState
             title="No Attendance Records Found"
-            description="Adjust your search filters or date selection."
+            description="Adjust your search filters or date range selection."
             actionLabel="Clear Filters"
-            onAction={() => {
-              setSearchQuery("");
-              setSelectedDepartment("ALL");
-              setSelectedStatus("ALL");
-              setSelectedValidation("ALL");
-              setSelectedDate("");
-            }}
+            onAction={handleClearFilters}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -344,6 +437,16 @@ export const AllAttendancePage: React.FC = () => {
         record={selectedRecord}
         canValidate={true}
         onOpenValidation={(rec) => setValidatingRecord(rec)}
+      />
+
+      {/* Date Range CSV Export Modal */}
+      <DateRangeExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        attendanceList={attendanceList}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+        initialDepartment={selectedDepartment}
       />
     </div>
   );
